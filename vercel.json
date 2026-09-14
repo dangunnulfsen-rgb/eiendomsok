@@ -1,17 +1,26 @@
 {
   "version": 2,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/companies",
-      "destination": "/api/companies.js"
+      "src": "api/*.js",
+      "use": "@vercel/node"
     },
     {
-      "source": "/api/properties",
-      "destination": "/api/properties.js"
+      "src": "client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "client/build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.js"
     },
     {
-      "source": "/:path((?!api).)*",
-      "destination": "/client/build/index.html"
+      "src": "/(.*)",
+      "dest": "/client/build/$1"
     }
   ]
 }
