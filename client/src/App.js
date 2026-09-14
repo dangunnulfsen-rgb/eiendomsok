@@ -19,16 +19,20 @@ function App() {
   const fetchCompanies = async (searchTerm = '', fylkeFilter = '') => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/companies', {
+      const baseURL = process.env.NODE_ENV === 'production'
+        ? 'https://eiendomsok.onrender.com'
+        : '';
+      const response = await axios.get(`${baseURL}/api/companies`, {
         params: {
           search: searchTerm,
           fylke: fylkeFilter
         }
       });
-      setCompanies(response.data.companies);
+      setCompanies(response.data?.companies || []);
       setSelectedCompany(null);
     } catch (error) {
       console.error('Feil ved henting av bedrifter:', error);
+      setCompanies([]);
     }
     setLoading(false);
   };
