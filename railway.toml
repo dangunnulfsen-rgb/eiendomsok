@@ -1,7 +1,7 @@
 [build]
-builder = "nix"
-nixpacks.providers = ["nodejs-npm"]
+builder = "nixpacks"
 
 [deploy]
-startCommand = "npm install && node server.js"
-PORT = 8080
+restartPolicyType = "on_failure"
+healthcheckPath = "/api/companies"
+healthcheckTimeout = 100
