@@ -1,10 +1,12 @@
 import React from 'react';
 
-function CompanyList({ companies, loading, onSelectCompany }) {
-  const colors = ['blue', 'green', 'orange', 'purple'];
+const COLORS = ['blue', 'green', 'orange', 'purple'];
 
+const aarstall = (dato) => (dato ? dato.slice(0, 4) : '–');
+
+function CompanyList({ companies, loading, onSelectCompany }) {
   if (loading) {
-    return <div className="loading">Laster bedrifter...</div>;
+    return <div className="loading">Laster bedrifter fra Enhetsregisteret...</div>;
   }
 
   if (companies.length === 0) {
@@ -13,44 +15,62 @@ function CompanyList({ companies, loading, onSelectCompany }) {
 
   return (
     <div className="company-grid">
-      {companies.map((company, idx) => (
-        <div
-          key={company.id}
-          className={`company-card company-card-${colors[idx % colors.length]}`}
-          onClick={() => onSelectCompany(company)}
-        >
-          <h3 className="company-name">{company.name}</h3>
-          <p className="company-meta">{company.fylke} · {company.properties} eiendommer</p>
+      {companies.map((company, idx) => {
+        const color = COLORS[idx % COLORS.length];
+        return (
+          <div
+            key={company.id}
+            className={`company-card company-card-${color}`}
+            onClick={() => onSelectCompany(company)}
+          >
+            <h3 className="company-name">{company.name}</h3>
+            <p className="company-meta">
+              {[company.kommune, company.fylke].filter(Boolean).join(' · ')}
+            </p>
+            <p className="company-meta">{company.naering}</p>
 
-          <div className="company-info">
-            <div className="company-info-item">
-              <p>Ansatte</p>
-              <p style={{ color: `var(--color-${colors[idx % colors.length]})` }}>
-                {company.employees}
+            {(company.konkurs || company.underAvvikling) && (
+              <p className="company-flag">
+                {company.konkurs ? 'Konkurs' : 'Under avvikling'}
               </p>
+            )}
+
+            <div className="company-info">
+              <div className="company-info-item">
+                <p>Org.nr</p>
+                <p className="orgnr" style={{ color: `var(--color-${color})` }}>
+                  {company.orgnr}
+                </p>
+              </div>
+              <div className="company-info-item" style={{ textAlign: 'right' }}>
+                <p>Etablert</p>
+                <p style={{ color: `var(--color-${color})` }}>
+                  {aarstall(company.established)}
+                </p>
+              </div>
             </div>
-            <div className="company-info-item" style={{ textAlign: 'right' }}>
-              <p>Etablert</p>
-              <p style={{ color: `var(--color-${colors[idx % colors.length]})` }}>
-                {company.established}
+
+            <div className="company-leader">
+              <strong>{company.address || 'Adresse ikke registrert'}</strong>
+              <p className="email">
+                {[company.postalCode, company.city].filter(Boolean).join(' ')}
               </p>
+              {company.phone && <p className="phone">{company.phone}</p>}
+              {company.email && <p className="email">{company.email}</p>}
             </div>
-          </div>
 
-          <div className="company-leader">
-            <strong>{company.leader}</strong>
-            <p className="email">{company.email}</p>
-            <p className="phone">{company.phone}</p>
+            <button
+              className="btn-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectCompany(company);
+              }}
+            >
+              Se Detaljer
+            </button>
           </div>
-
-          <button className="btn-primary" onClick={(e) => {
-            e.stopPropagation();
-            onSelectCompany(company);
-          }}>
-            Se Detaljer
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

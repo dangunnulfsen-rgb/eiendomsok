@@ -234,6 +234,42 @@ body {
   font-size: 16px;
 }
 
+.company-meta + .company-meta {
+  margin-top: -14px;
+}
+
+.company-flag {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff1f0;
+  color: #d70015;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.company-info-item p.orgnr {
+  font-size: 17px;
+  letter-spacing: 0.02em;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 32px 0;
+  color: var(--color-secondary);
+  font-size: 14px;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Company Detail */
 .detail-container {
   background: var(--color-white);

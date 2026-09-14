@@ -8,146 +8,224 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());
 
-// Serve React static files
-app.use(express.static(path.join(__dirname, 'client', 'build')));
+const BRREG = 'https://data.brreg.no/enhetsregisteret/api';
+const GEONORGE = 'https://ws.geonorge.no/adresser/v1/sok';
 
-// Brønnøysund Register API - Søk etter eiendomsselskaper
+// NACE-koder for eiendom (2025-revisjonen)
+const NAERINGSKODER = ['68.200', '68.310', '68.320'].join(',');
+
+const FYLKER = {
+  Buskerud: ['3301', '3303', '3305', '3310', '3312', '3314', '3316', '3318', '3320',
+    '3322', '3324', '3326', '3328', '3330', '3332', '3334', '3336', '3338'],
+  Vestfold: ['3901', '3903', '3905', '3907', '3909', '3911'],
+  Telemark: ['4001', '4003', '4005', '4010', '4012', '4014', '4016', '4018', '4020',
+    '4022', '4024', '4026', '4028', '4030', '4032', '4034', '4036']
+};
+
+const ALLE_KOMMUNER = Object.values(FYLKER).flat();
+
+const fylkeFor = (kommunenummer = '') =>
+  Object.keys(FYLKER).find(f => FYLKER[f].includes(kommunenummer)) || null;
+
+const SELSKAPSFORMER = new Set(['AS', 'ASA', 'ANS', 'DA', 'NUF', 'BA', 'SA', 'KS', 'BBL', 'IKS']);
+
+const titleCase = (s) => {
+  if (!s) return null;
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s\-/])(\p{L})/gu, (_, sep, c) => sep + c.toUpperCase())
+    .replace(/\p{L}+/gu, (word) =>
+      SELSKAPSFORMER.has(word.toUpperCase()) ? word.toUpperCase() : word
+    );
+};
+
+const brreg = axios.create({
+  baseURL: BRREG,
+  timeout: 15000,
+  headers: { Accept: 'application/json' }
+});
+
+function mapEnhet(e) {
+  const adr = e.forretningsadresse || {};
+  return {
+    id: e.organisasjonsnummer,
+    orgnr: e.organisasjonsnummer,
+    name: titleCase(e.navn),
+    orgform: e.organisasjonsform?.beskrivelse || null,
+    naering: e.naeringskode1?.beskrivelse || null,
+    naeringskode: e.naeringskode1?.kode || null,
+    fylke: fylkeFor(adr.kommunenummer),
+    kommune: titleCase(adr.kommune),
+    address: (adr.adresse || []).filter(Boolean).join(', ') || null,
+    postalCode: adr.postnummer || null,
+    city: titleCase(adr.poststed),
+    established: e.stiftelsesdato || null,
+    registered: e.registreringsdatoEnhetsregisteret || null,
+    employees: typeof e.antallAnsatte === 'number' ? e.antallAnsatte : null,
+    phone: e.telefon || e.mobil || null,
+    email: e.epostadresse || null,
+    website: e.hjemmeside || null,
+    konkurs: !!e.konkurs,
+    underAvvikling: !!(e.underAvvikling || e.underTvangsavviklingEllerTvangsopplosning)
+  };
+}
+
+// Søk i Enhetsregisteret
 app.get('/api/companies', async (req, res) => {
   try {
-    const { search = '', fylke = '', page = 1 } = req.query;
+    const { search = '', fylke = '', page = 0, size = 24 } = req.query;
+    const kommuner = FYLKER[fylke] || ALLE_KOMMUNER;
 
-    // Næringskoder for eiendom
-    // Mock data for demo (Brønnøysund API requires auth)
-    const mockCompanies = [
-      {
-        organisasjonsnummer: '123456789',
-        navn: 'Telemark Eiendom AS',
-        forretningsadresse: { kommune: 'Skien' }
-      },
-      {
-        organisasjonsnummer: '987654321',
-        navn: 'Vestfold Eiendomsselskap',
-        forretningsadresse: { kommune: 'Tønsberg' }
-      },
-      {
-        organisasjonsnummer: '555666777',
-        navn: 'Buskerud Eiendommer',
-        forretningsadresse: { kommune: 'Drammen' }
-      },
-      {
-        organisasjonsnummer: '111222333',
-        navn: 'Nordic Property Management',
-        forretningsadresse: { kommune: 'Larvik' }
-      },
-      {
-        organisasjonsnummer: '444555666',
-        navn: 'Eiendomsselskapet Østlandet',
-        forretningsadresse: { kommune: 'Fredrikstad' }
-      }
-    ];
+    const params = {
+      naeringskode: NAERINGSKODER,
+      kommunenummer: kommuner.join(','),
+      size: Math.min(Number(size) || 24, 100),
+      page: Number(page) || 0
+    };
+    if (search.trim()) params.navn = search.trim();
 
-    const allCompanies = mockCompanies;
-
-    // Legg til mock data for eiendommer
-    const companiesWithData = allCompanies.slice(0, 10).map((company, idx) => ({
-      id: company.organisasjonsnummer,
-      name: company.navn,
-      orgnr: company.organisasjonsnummer,
-      fylke: company.forretningsadresse?.kommune || 'Ukjent',
-      properties: Math.floor(Math.random() * 40) + 5,
-      employees: Math.floor(Math.random() * 30) + 1,
-      established: Math.floor(Math.random() * 15) + 2008,
-      leader: ['Ole Johansen', 'Anna Berg', 'Per Larsen', 'Karin Sæther'][idx % 4],
-      email: `info@${company.navn.toLowerCase().replace(/\s+/g, '-')}.no`,
-      phone: `+47 ${Math.floor(Math.random() * 90000000) + 10000000}`
-    }));
+    const { data } = await brreg.get('/enheter', { params });
+    const enheter = data._embedded?.enheter || [];
 
     res.json({
-      companies: companiesWithData,
-      total: allCompanies.length,
-      page,
-      hasMore: allCompanies.length > page * 10
+      companies: enheter.map(mapEnhet),
+      total: data.page?.totalElements ?? 0,
+      page: data.page?.number ?? 0,
+      totalPages: data.page?.totalPages ?? 0,
+      source: 'Enhetsregisteret (Brønnøysundregistrene)'
     });
   } catch (error) {
-    console.error('API Error:', error.message);
-    res.status(500).json({ error: 'Feil ved søk' });
+    console.error('Brreg søk feilet:', error.message);
+    res.status(502).json({ error: 'Kunne ikke hente data fra Brønnøysundregistrene' });
   }
 });
 
-// Hent detaljer om ett selskap
+// Detaljer + roller for ett selskap
 app.get('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!/^\d{9}$/.test(id)) {
+    return res.status(400).json({ error: 'Ugyldig organisasjonsnummer' });
+  }
+
   try {
-    const { id } = req.params;
+    const { data: enhet } = await brreg.get(`/enheter/${id}`);
+    const company = mapEnhet(enhet);
 
-    const response = await axios.get(`https://data.brreg.no/enhetsregisteret/api/enheter/${id}`);
-    const company = response.data;
+    company.formaal = (enhet.vedtektsfestetFormaal || []).join(' ') || null;
+    company.aktivitet = (enhet.aktivitet || []).join(' ') || null;
+    company.kapital = enhet.kapital?.belop ?? null;
+    company.sisteAarsregnskap = enhet.sisteInnsendteAarsregnskap || null;
+    company.roles = [];
 
-    // Hent roller (ledere, styremedlemmer)
-    const rolesResponse = await axios.get(
-      `https://data.brreg.no/enhetsregisteret/api/enheter/${id}/roller`
+    // Roller ligger på et eget endepunkt og kan mangle
+    try {
+      const { data: roller } = await brreg.get(`/enheter/${id}/roller`);
+      company.roles = (roller.rollegrupper || []).flatMap(gruppe =>
+        (gruppe.roller || [])
+          .filter(r => !r.fratraadt)
+          .map(r => {
+            const navn = r.person?.navn;
+            const personNavn = navn
+              ? [navn.fornavn, navn.mellomnavn, navn.etternavn].filter(Boolean).join(' ')
+              : null;
+            return {
+              role: r.type?.beskrivelse || r.type?.kode,
+              name: personNavn || titleCase((r.enhet?.navn || []).join(' ')) || 'Ukjent',
+              isCompany: !r.person
+            };
+          })
+      );
+    } catch (rolleError) {
+      console.warn(`Roller utilgjengelig for ${id}:`, rolleError.message);
+    }
+
+    res.json(company);
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return res.status(404).json({ error: 'Selskapet finnes ikke i Enhetsregisteret' });
+    }
+    console.error('Brreg detalj feilet:', error.message);
+    res.status(502).json({ error: 'Kunne ikke hente detaljer' });
+  }
+});
+
+// Geokoding via Kartverket (Geonorge) av selskapets registrerte adresser
+async function geocode(adresse) {
+  const linje = (adresse.adresse || []).filter(Boolean).join(' ');
+  if (!linje || !adresse.postnummer) return null;
+
+  try {
+    const { data } = await axios.get(GEONORGE, {
+      params: { sok: linje, postnummer: adresse.postnummer, treffPerSide: 1 },
+      timeout: 10000
+    });
+    const treff = data.adresser?.[0];
+    if (!treff?.representasjonspunkt) return null;
+
+    return {
+      address: `${treff.adressetekst}, ${treff.postnummer} ${titleCase(treff.poststed)}`,
+      lat: treff.representasjonspunkt.lat,
+      lng: treff.representasjonspunkt.lon,
+      kommune: titleCase(treff.kommunenavn),
+      matrikkel: `${treff.kommunenummer}-${treff.gardsnummer}/${treff.bruksnummer}`
+    };
+  } catch (error) {
+    console.warn('Geokoding feilet:', error.message);
+    return null;
+  }
+}
+
+app.get('/api/properties', async (req, res) => {
+  const { orgnr } = req.query;
+  if (!/^\d{9}$/.test(orgnr || '')) {
+    return res.status(400).json({ error: 'Ugyldig organisasjonsnummer' });
+  }
+
+  try {
+    const [enhetRes, underRes] = await Promise.all([
+      brreg.get(`/enheter/${orgnr}`),
+      brreg.get('/underenheter', { params: { overordnetEnhet: orgnr, size: 20 } })
+        .catch(() => ({ data: {} }))
+    ]);
+
+    const kilder = [];
+    const hovedadresse = enhetRes.data.forretningsadresse;
+    if (hovedadresse) kilder.push({ adresse: hovedadresse, type: 'Forretningsadresse' });
+
+    for (const under of underRes.data._embedded?.underenheter || []) {
+      const adr = under.beliggenhetsadresse;
+      if (adr) kilder.push({ adresse: adr, type: titleCase(under.navn) || 'Underenhet' });
+    }
+
+    const punkter = await Promise.all(
+      kilder.map(async (kilde, idx) => {
+        const geo = await geocode(kilde.adresse);
+        return geo && { id: idx + 1, type: kilde.type, ...geo };
+      })
+    );
+
+    const funnet = punkter.filter(Boolean);
+    const unike = funnet.filter(
+      (p, i) => funnet.findIndex(q => q.matrikkel === p.matrikkel) === i
     );
 
     res.json({
-      id: company.organisasjonsnummer,
-      name: company.navn,
-      orgnr: company.organisasjonsnummer,
-      address: company.forretningsadresse?.adresse?.join(', '),
-      postalCode: company.forretningsadresse?.postnummer,
-      city: company.forretningsadresse?.poststed,
-      phone: company.organisasjonsnummer,
-      website: company.hjemmeside,
-      established: company.stiftelsesdato,
-      properties: Math.floor(Math.random() * 40) + 5,
-      leaders: rolesResponse.data._embedded?.roller
-        ?.filter(r => ['LEDER', 'DAGLIG_LEDER', 'STYRELEDER'].includes(r.rolle))
-        ?.map(r => ({
-          name: r.person?.navn || 'Ukjent',
-          role: r.rolle,
-          email: 'kontakt@selskap.no',
-          phone: '+47 987 65 432'
-        })) || []
+      properties: unike,
+      source: 'Kartverket (Geonorge) · adresser fra Enhetsregisteret'
     });
   } catch (error) {
-    console.error('API Error:', error.message);
-    res.status(500).json({ error: 'Kunne ikke hente detaljer' });
+    console.error('Adressehenting feilet:', error.message);
+    res.status(502).json({ error: 'Kunne ikke hente adresser' });
   }
 });
 
-// Kartverket API proxy - properties with coordinates
-app.get('/api/properties', async (req, res) => {
-  try {
-    const { orgnr } = req.query;
+app.use(express.static(path.join(__dirname, 'client', 'build')));
 
-    // Mock Kartverket data with real coordinates (Telemark/Vestfold)
-    const propertiesData = {
-      '123456789': [
-        { id: 1, address: 'Storgata 45, 3700 Skien', type: 'Bolig', lat: 59.2087, lng: 9.6477, size: 250 },
-        { id: 2, address: 'Kirkegata 12, 3915 Porsgrunn', type: 'Næring', lat: 59.1389, lng: 9.6453, size: 1200 },
-        { id: 3, address: 'Torggata 8, 3700 Skien', type: 'Bolig', lat: 59.2095, lng: 9.6455, size: 180 }
-      ],
-      default: [
-        { id: 1, address: 'Hovedgata 10, Tønsberg', type: 'Bolig', lat: 59.2667, lng: 10.4000, size: 320 },
-        { id: 2, address: 'Strandveien 25, Larvik', type: 'Næringsbygg', lat: 59.0500, lng: 10.0400, size: 850 },
-        { id: 3, address: 'Parkvegen 7, Fredrikstad', type: 'Kontor', lat: 59.2178, lng: 10.9470, size: 450 }
-      ]
-    };
-
-    const properties = propertiesData[orgnr] || propertiesData.default;
-    res.json(properties);
-  } catch (error) {
-    console.error('API Error:', error.message);
-    res.status(500).json({ error: 'Feil ved henting av eiendommer' });
-  }
-});
-
-// Catch-all route for React SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`✓ Server kjører på http://localhost:${PORT}`);
-  console.log(`✓ API: http://localhost:${PORT}/api/companies`);
+  console.log(`✓ Server kjører på port ${PORT}`);
 });

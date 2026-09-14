@@ -2,70 +2,74 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-function PropertyMap({ properties, companyName }) {
+const COLORS = ['#0071e3', '#34c759', '#ff9500', '#af52de'];
+
+function popupNode({ address, type, matrikkel }) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText =
+    "font-family: -apple-system, BlinkMacSystemFont, sans-serif; min-width: 200px;";
+
+  const tittel = document.createElement('h4');
+  tittel.style.cssText = 'margin: 0 0 8px 0; color: #1d1d1f;';
+  tittel.textContent = address;
+  wrap.appendChild(tittel);
+
+  for (const [etikett, verdi] of [['Type', type], ['Matrikkel', matrikkel]]) {
+    if (!verdi) continue;
+    const rad = document.createElement('p');
+    rad.style.cssText = 'margin: 4px 0; color: #86868b; font-size: 13px;';
+    const b = document.createElement('strong');
+    b.textContent = `${etikett}: `;
+    rad.appendChild(b);
+    rad.appendChild(document.createTextNode(verdi));
+    wrap.appendChild(rad);
+  }
+
+  return wrap;
+}
+
+function PropertyMap({ properties }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
+  const markerLayer = useRef(null);
 
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Initialize map centered on Telemark/Vestfold region
     if (!mapInstance.current) {
-      mapInstance.current = L.map(mapRef.current).setView([59.25, 9.9], 9);
-
+      mapInstance.current = L.map(mapRef.current).setView([59.25, 9.9], 8);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
       }).addTo(mapInstance.current);
+      markerLayer.current = L.featureGroup().addTo(mapInstance.current);
     }
 
-    // Clear existing markers
-    mapInstance.current.eachLayer(layer => {
-      if (layer instanceof L.Marker) {
-        mapInstance.current.removeLayer(layer);
-      }
+    markerLayer.current.clearLayers();
+
+    if (!properties || properties.length === 0) return;
+
+    properties.forEach((prop, idx) => {
+      L.circleMarker([prop.lat, prop.lng], {
+        radius: 9,
+        fillColor: COLORS[idx % COLORS.length],
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.85
+      })
+        .bindPopup(popupNode(prop))
+        .addTo(markerLayer.current);
     });
 
-    // Add property markers
-    if (properties && properties.length > 0) {
-      const group = L.featureGroup();
-
-      properties.forEach((prop, idx) => {
-        const colors = ['#0071e3', '#34c759', '#ff9500', '#af52de'];
-        const color = colors[idx % colors.length];
-
-        const marker = L.circleMarker([prop.lat, prop.lng], {
-          radius: 8,
-          fillColor: color,
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.8
-        });
-
-        marker.bindPopup(`
-          <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; min-width: 200px;">
-            <h4 style="margin: 0 0 8px 0; color: #1d1d1f;">${prop.address}</h4>
-            <p style="margin: 4px 0; color: #86868b; font-size: 13px;">
-              <strong>Type:</strong> ${prop.type}
-            </p>
-            <p style="margin: 4px 0; color: #86868b; font-size: 13px;">
-              <strong>Størrelse:</strong> ${prop.size} m²
-            </p>
-          </div>
-        `);
-
-        group.addLayer(marker);
-      });
-
-      group.addTo(mapInstance.current);
-      mapInstance.current.fitBounds(group.getBounds().pad(0.1));
-    }
+    mapInstance.current.fitBounds(markerLayer.current.getBounds().pad(0.3), {
+      maxZoom: 15
+    });
   }, [properties]);
 
   return (
     <div style={{ marginTop: '24px' }}>
-      <h2 style={{ marginBottom: '16px', color: '#1d1d1f' }}>Eiendommer på Kart</h2>
+      <h2 style={{ marginBottom: '16px', color: '#1d1d1f' }}>Registrerte adresser</h2>
       <div
         ref={mapRef}
         style={{
@@ -77,7 +81,9 @@ function PropertyMap({ properties, companyName }) {
         }}
       />
       <p style={{ marginTop: '12px', color: '#86868b', fontSize: '13px' }}>
-        {properties?.length || 0} eiendom{properties?.length === 1 ? '' : 'er'} registrert
+        {properties?.length
+          ? `${properties.length} adresse${properties.length === 1 ? '' : 'r'} geokodet via Kartverket`
+          : 'Ingen adresser kunne geokodes'}
       </p>
     </div>
   );

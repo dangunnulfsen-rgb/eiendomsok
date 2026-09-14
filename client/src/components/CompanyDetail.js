@@ -3,6 +3,8 @@ import axios from 'axios';
 import PropertyMap from './PropertyMap';
 import getApiBaseUrl from '../utils/api';
 
+const IKKE_REGISTRERT = 'Ikke registrert';
+
 function CompanyDetail({ company, onBack }) {
   const [detail, setDetail] = useState(company);
   const [properties, setProperties] = useState([]);
@@ -12,6 +14,7 @@ function CompanyDetail({ company, onBack }) {
     const loadData = async () => {
       setLoading(true);
       const baseURL = getApiBaseUrl();
+
       try {
         const response = await axios.get(`${baseURL}/api/companies/${company.id}`);
         setDetail(response.data);
@@ -24,11 +27,12 @@ function CompanyDetail({ company, onBack }) {
         const propsResponse = await axios.get(`${baseURL}/api/properties`, {
           params: { orgnr: company.id }
         });
-        setProperties(propsResponse.data || []);
+        setProperties(propsResponse.data?.properties || []);
       } catch (error) {
-        console.error('Feil ved henting av eiendommer:', error);
+        console.error('Feil ved henting av adresser:', error);
         setProperties([]);
       }
+
       setLoading(false);
     };
 
@@ -36,6 +40,19 @@ function CompanyDetail({ company, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company.id]);
 
+  const felter = [
+    ['Organisasjonsform', detail.orgform],
+    ['Næring', detail.naering],
+    ['Fylke', detail.fylke],
+    ['Kommune', detail.kommune],
+    ['Adresse', detail.address],
+    ['Poststed', [detail.postalCode, detail.city].filter(Boolean).join(' ')],
+    ['Stiftet', detail.established],
+    ['Registrert i Enhetsregisteret', detail.registered],
+    ['Aksjekapital', detail.kapital ? `${detail.kapital.toLocaleString('nb-NO')} kr` : null],
+    ['Siste årsregnskap', detail.sisteAarsregnskap],
+    ['Ansatte', detail.employees]
+  ];
 
   return (
     <div className="detail-container">
@@ -46,68 +63,71 @@ function CompanyDetail({ company, onBack }) {
       <div className="detail-header">
         <h1>{detail.name}</h1>
         <p>Organisasjonsnummer: {detail.orgnr}</p>
+        {(detail.konkurs || detail.underAvvikling) && (
+          <p className="company-flag">
+            {detail.konkurs ? 'Registrert konkurs' : 'Under avvikling'}
+          </p>
+        )}
       </div>
 
       {loading ? (
-        <p style={{ textAlign: 'center', color: '#86868b' }}>Laster detaljer...</p>
+        <p style={{ textAlign: 'center', color: '#86868b' }}>Laster fra Enhetsregisteret...</p>
       ) : (
         <div className="detail-grid">
           <div className="detail-section">
             <h2>Bedriftsinformasjon</h2>
             <ul>
-              <li>
-                <strong>Fylke</strong>
-                <span>{detail.fylke}</span>
-              </li>
-              <li>
-                <strong>Adresse</strong>
-                <span>{detail.address || 'Ikke tilgjengelig'}</span>
-              </li>
-              <li>
-                <strong>Postnummer</strong>
-                <span>{detail.postalCode || 'Ikke tilgjengelig'}</span>
-              </li>
-              <li>
-                <strong>By</strong>
-                <span>{detail.city || 'Ikke tilgjengelig'}</span>
-              </li>
-              <li>
-                <strong>Etablert</strong>
-                <span>{detail.established || 'Ukjent'}</span>
-              </li>
-              <li>
-                <strong>Eiendommer</strong>
-                <span>{detail.properties}</span>
-              </li>
+              {felter.map(([navn, verdi]) => (
+                <li key={navn}>
+                  <strong>{navn}</strong>
+                  <span>{verdi === null || verdi === undefined || verdi === '' ? IKKE_REGISTRERT : verdi}</span>
+                </li>
+              ))}
             </ul>
           </div>
 
           <div className="detail-section">
-            <h2>Daglig Leder</h2>
-            {detail.leaders && detail.leaders.length > 0 ? (
+            <h2>Kontakt</h2>
+            <ul>
+              <li>
+                <strong>Telefon</strong>
+                <span>{detail.phone || IKKE_REGISTRERT}</span>
+              </li>
+              <li>
+                <strong>E-post</strong>
+                <span>{detail.email || IKKE_REGISTRERT}</span>
+              </li>
+              <li>
+                <strong>Nettside</strong>
+                <span>{detail.website || IKKE_REGISTRERT}</span>
+              </li>
+            </ul>
+
+            <h2 style={{ marginTop: '32px' }}>Roller</h2>
+            {detail.roles && detail.roles.length > 0 ? (
               <ul>
-                {detail.leaders.map((leader, idx) => (
-                  <li key={idx}>
-                    <strong>{leader.name}</strong>
-                    <span>{leader.email}</span>
-                    <span style={{ display: 'block', marginTop: '4px' }}>{leader.phone}</span>
+                {detail.roles.map((rolle, idx) => (
+                  <li key={`${rolle.role}-${rolle.name}-${idx}`}>
+                    <strong>{rolle.role}</strong>
+                    <span>{rolle.name}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <ul>
-                <li>
-                  <strong>{company.leader}</strong>
-                  <span>{company.email}</span>
-                  <span style={{ display: 'block', marginTop: '4px' }}>{company.phone}</span>
-                </li>
-              </ul>
+              <p style={{ color: '#86868b' }}>Ingen roller registrert</p>
+            )}
+
+            {detail.formaal && (
+              <>
+                <h2 style={{ marginTop: '32px' }}>Vedtektsfestet formål</h2>
+                <p style={{ color: '#86868b', lineHeight: 1.6 }}>{detail.formaal}</p>
+              </>
             )}
           </div>
         </div>
       )}
 
-      <PropertyMap properties={properties} companyName={detail.name} />
+      <PropertyMap properties={properties} />
 
       <div style={{ marginTop: '48px', paddingTop: '48px', borderTop: '1px solid #f5f5f7' }}>
         <button className="btn-primary" onClick={onBack}>
