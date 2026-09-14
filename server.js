@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -8,6 +9,9 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve React static files
+app.use(express.static(path.join(__dirname, 'client', 'build')));
 
 // Brønnøysund Register API - Søk etter eiendomsselskaper
 app.get('/api/companies', async (req, res) => {
@@ -136,6 +140,11 @@ app.get('/api/properties', async (req, res) => {
     console.error('API Error:', error.message);
     res.status(500).json({ error: 'Feil ved henting av eiendommer' });
   }
+});
+
+// Catch-all route for React SPA
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
 });
 
 app.listen(PORT, () => {

@@ -1,7 +1,6 @@
 const getApiBaseUrl = () => {
-  // Always use Render backend URL for production
-  // In development, this won't match localhost dev server, so empty string for proxy fallback
-  return 'https://eiendomsok.onrender.com';
+  // Use same-server API (no cross-origin needed)
+  return '';
 };
 
 export default getApiBaseUrl;
