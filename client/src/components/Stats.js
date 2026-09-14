@@ -1,10 +1,10 @@
 import React from 'react';
 
-function Stats({ companies }) {
+function Stats({ companies = [] }) {
   const totalProperties = companies.reduce((sum, c) => sum + c.properties, 0);
-  const avgEmployees = Math.round(
-    companies.reduce((sum, c) => sum + c.employees, 0) / (companies.length || 1)
-  );
+  const avgEmployees = companies.length > 0 ? Math.round(
+    companies.reduce((sum, c) => sum + c.employees, 0) / companies.length
+  ) : 0;
 
   return (
     <div className="stats">
