@@ -89,7 +89,20 @@
       "Read(//private/tmp/**)",
       "Bash(pkill -f \"node server.js\")",
       "Bash(awk 'NR>1 {print $2}')",
-      "Bash(vercel deploy *)"
+      "Bash(vercel deploy *)",
+      "Bash(gh repo *)",
+      "Bash(PORT=8000 npm run server)",
+      "Bash(npm start *)",
+      "Bash(PORT=3001 npm start)",
+      "Bash(curl -s \"http://localhost:8000/api/companies?search=eiendom&fylke=\")",
+      "Bash(curl -s \"http://localhost:8000/api/companies?search=eiendom\")",
+      "Bash(killall node *)",
+      "Bash(PORT=5001 npm run server)",
+      "Bash(curl -s \"http://localhost:5001/api/companies?search=eiendom\")",
+      "Bash(curl -s \"http://localhost:5001/api/companies?search=test\")",
+      "Bash(curl -s \"http://localhost:5001/api/properties?orgnr=123456789\")",
+      "Bash(PORT=3003 npm start)",
+      "Bash(curl -s \"http://localhost:5001/api/companies?search=\")"
     ]
   }
 }
