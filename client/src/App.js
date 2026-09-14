@@ -4,6 +4,7 @@ import './App.css';
 import CompanyList from './components/CompanyList';
 import CompanyDetail from './components/CompanyDetail';
 import Stats from './components/Stats';
+import getApiBaseUrl from './utils/api';
 
 function App() {
   const [companies, setCompanies] = useState([]);
@@ -19,9 +20,7 @@ function App() {
   const fetchCompanies = async (searchTerm = '', fylkeFilter = '') => {
     setLoading(true);
     try {
-      const baseURL = process.env.NODE_ENV === 'production'
-        ? 'https://eiendomsok.onrender.com'
-        : '';
+      const baseURL = getApiBaseUrl();
       const response = await axios.get(`${baseURL}/api/companies`, {
         params: {
           search: searchTerm,

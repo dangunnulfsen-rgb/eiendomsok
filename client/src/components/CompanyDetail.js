@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import PropertyMap from './PropertyMap';
+import getApiBaseUrl from '../utils/api';
 
 function CompanyDetail({ company, onBack }) {
   const [detail, setDetail] = useState(company);
@@ -10,8 +11,9 @@ function CompanyDetail({ company, onBack }) {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      const baseURL = getApiBaseUrl();
       try {
-        const response = await axios.get(`/api/companies/${company.id}`);
+        const response = await axios.get(`${baseURL}/api/companies/${company.id}`);
         setDetail(response.data);
       } catch (error) {
         console.error('Feil ved henting av detaljer:', error);
@@ -19,10 +21,10 @@ function CompanyDetail({ company, onBack }) {
       }
 
       try {
-        const propsResponse = await axios.get('/api/properties', {
+        const propsResponse = await axios.get(`${baseURL}/api/properties`, {
           params: { orgnr: company.id }
         });
-        setProperties(propsResponse.data);
+        setProperties(propsResponse.data || []);
       } catch (error) {
         console.error('Feil ved henting av eiendommer:', error);
         setProperties([]);

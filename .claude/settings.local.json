@@ -105,7 +105,18 @@
       "Bash(curl -s \"http://localhost:5001/api/companies?search=\")",
       "Bash(railway link *)",
       "Bash(railway domain *)",
-      "Bash(curl -s \"https://practical-spontaneity-production.up.railway.app/api/companies?search=\")"
+      "Bash(curl -s \"https://practical-spontaneity-production.up.railway.app/api/companies?search=\")",
+      "mcp__claude-in-chrome__navigate",
+      "Bash(curl -s \"https://eiendomsok-my7ax4z16-dan-9fbd.vercel.app/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok-app.vercel.app/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok-9d5imo55x-dan-9fbd.vercel.app/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok-9d5imo55x-dan-9fbd.vercel.app/\")",
+      "Bash(curl -I \"https://eiendomsok-9d5imo55x-dan-9fbd.vercel.app/\")",
+      "Bash(curl -s \"https://eiendomsok-c1dllcwem-dan-9fbd.vercel.app/api/companies\")",
+      "Bash(curl -s \"https://practical-spontaneity-production.up.railway.app/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok-api.onrender.com/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok.onrender.com/api/companies\")",
+      "Bash(curl -s \"https://eiendomsok-app.vercel.app/\")"
     ]
   }
 }
