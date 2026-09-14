@@ -1,0 +1,7 @@
+[build]
+builder = "nix"
+nixpacks.providers = ["nodejs-npm"]
+
+[deploy]
+startCommand = "npm install && node server.js"
+PORT = 8080
