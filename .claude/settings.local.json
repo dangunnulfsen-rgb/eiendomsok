@@ -116,7 +116,11 @@
       "Bash(curl -s \"https://practical-spontaneity-production.up.railway.app/api/companies\")",
       "Bash(curl -s \"https://eiendomsok-api.onrender.com/api/companies\")",
       "Bash(curl -s \"https://eiendomsok.onrender.com/api/companies\")",
-      "Bash(curl -s \"https://eiendomsok-app.vercel.app/\")"
+      "Bash(curl -s \"https://eiendomsok-app.vercel.app/\")",
+      "Bash(curl -s https://eiendomsok.onrender.com/api/companies)",
+      "Bash(python3 -m http.server 8000)",
+      "Bash(pkill -f \"python3 -m http.server\")",
+      "Bash(python3 -m http.server 9999)"
     ]
   }
 }
