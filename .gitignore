@@ -1,4 +1,11 @@
+node_modules/
+
+# client/build is deliberately committed: Render only runs `npm install` at the
+# root, so the React bundle must already be in the repo for the server to serve it.
+
 .env
 venv/
 __pycache__/
 .vercel
+.DS_Store
+*.log
