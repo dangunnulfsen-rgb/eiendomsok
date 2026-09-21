@@ -19,6 +19,7 @@ function App() {
   const [query, setQuery] = useState({ search: '', fylke: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
@@ -30,11 +31,13 @@ function App() {
       setCompanies(data.companies || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 0);
+      setNotice(data.notice || null);
     } catch (err) {
       console.error('Feil ved henting av bedrifter:', err);
       setError('Kunne ikke hente data fra Brønnøysundregistrene. Prøv igjen.');
       setCompanies([]);
       setTotal(0);
+      setNotice(null);
     }
     setLoading(false);
   }, [query, page]);
@@ -69,7 +72,7 @@ function App() {
             <form onSubmit={handleSearch} className="search-form">
               <input
                 type="text"
-                placeholder="Søk bedriftsnavn..."
+                placeholder="Søk bedriftsnavn eller org.nr..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="search-input"
@@ -88,12 +91,15 @@ function App() {
             </form>
 
             {error && <div className="loading">{error}</div>}
+            {notice && !loading && <div className="notice">{notice}</div>}
 
-            <CompanyList
-              companies={companies}
-              loading={loading}
-              onSelectCompany={setSelectedCompany}
-            />
+            {(!notice || loading) && (
+              <CompanyList
+                companies={companies}
+                loading={loading}
+                onSelectCompany={setSelectedCompany}
+              />
+            )}
 
             {maksSider > 1 && (
               <div className="pagination">

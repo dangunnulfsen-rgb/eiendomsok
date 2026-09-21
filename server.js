@@ -83,16 +83,36 @@ app.get('/api/companies', async (req, res) => {
       size: Math.min(Number(size) || 24, 100),
       page: Number(page) || 0
     };
-    if (search.trim()) params.navn = search.trim();
+
+    const term = search.trim();
+    const orgnr = term.replace(/[\s.-]/g, '');
+    const sokerPaaOrgnr = /^\d{9}$/.test(orgnr);
+
+    if (sokerPaaOrgnr) params.organisasjonsnummer = orgnr;
+    else if (term) params.navn = term;
 
     const { data } = await brreg.get('/enheter', { params });
     const enheter = data._embedded?.enheter || [];
+    const total = data.page?.totalElements ?? 0;
+
+    // Et gyldig orgnr uten treff er som regel et selskap utenfor utvalget,
+    // ikke et tomt søk — si hvilket, i stedet for "ingen treff".
+    let notice = null;
+    if (sokerPaaOrgnr && total === 0) {
+      try {
+        const { data: enhet } = await brreg.get(`/enheter/${orgnr}`);
+        notice = `${titleCase(enhet.navn)} (${orgnr}) finnes i Enhetsregisteret, men er ikke registrert som eiendomsselskap i Telemark, Vestfold eller Buskerud.`;
+      } catch {
+        notice = `Fant ingen enhet med organisasjonsnummer ${orgnr}.`;
+      }
+    }
 
     res.json({
       companies: enheter.map(mapEnhet),
-      total: data.page?.totalElements ?? 0,
+      total,
       page: data.page?.number ?? 0,
       totalPages: data.page?.totalPages ?? 0,
+      notice,
       source: 'Enhetsregisteret (Brønnøysundregistrene)'
     });
   } catch (error) {
