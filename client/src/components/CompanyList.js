@@ -28,6 +28,9 @@ function CompanyList({ companies, loading, onSelectCompany }) {
               {[company.kommune, company.fylke].filter(Boolean).join(' · ')}
             </p>
             <p className="company-meta">{company.naering}</p>
+            {company.postKommune && (
+              <p className="company-meta">Postadresse: {company.postKommune}</p>
+            )}
 
             {(company.konkurs || company.underAvvikling) && (
               <p className="company-flag">

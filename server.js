@@ -15,18 +15,67 @@ const GEONORGE = 'https://ws.geonorge.no/adresser/v1/sok';
 // NACE-koder for eiendom (2025-revisjonen)
 const NAERINGSKODER = ['68.200', '68.310', '68.320'].join(',');
 
+const nb = new Intl.Collator('nb');
+
 const FYLKER = {
-  Buskerud: ['3301', '3303', '3305', '3310', '3312', '3314', '3316', '3318', '3320',
-    '3322', '3324', '3326', '3328', '3330', '3332', '3334', '3336', '3338'],
-  Vestfold: ['3901', '3903', '3905', '3907', '3909', '3911'],
-  Telemark: ['4001', '4003', '4005', '4010', '4012', '4014', '4016', '4018', '4020',
-    '4022', '4024', '4026', '4028', '4030', '4032', '4034', '4036']
+  Telemark: [
+    { nummer: '4012', navn: 'Bamble' },
+    { nummer: '4016', navn: 'Drangedal' },
+    { nummer: '4032', navn: 'Fyresdal' },
+    { nummer: '4024', navn: 'Hjartdal' },
+    { nummer: '4014', navn: 'Kragerø' },
+    { nummer: '4028', navn: 'Kviteseid' },
+    { nummer: '4020', navn: 'Midt-Telemark' },
+    { nummer: '4030', navn: 'Nissedal' },
+    { nummer: '4018', navn: 'Nome' },
+    { nummer: '4005', navn: 'Notodden' },
+    { nummer: '4001', navn: 'Porsgrunn' },
+    { nummer: '4022', navn: 'Seljord' },
+    { nummer: '4010', navn: 'Siljan' },
+    { nummer: '4003', navn: 'Skien' },
+    { nummer: '4026', navn: 'Tinn' },
+    { nummer: '4034', navn: 'Tokke' },
+    { nummer: '4036', navn: 'Vinje' }
+  ],
+  Vestfold: [
+    { nummer: '3903', navn: 'Holmestrand' },
+    { nummer: '3901', navn: 'Horten' },
+    { nummer: '3909', navn: 'Larvik' },
+    { nummer: '3907', navn: 'Sandefjord' },
+    { nummer: '3905', navn: 'Tønsberg' },
+    { nummer: '3911', navn: 'Færder' }
+  ],
+  Buskerud: [
+    { nummer: '3301', navn: 'Drammen' },
+    { nummer: '3334', navn: 'Flesberg' },
+    { nummer: '3320', navn: 'Flå' },
+    { nummer: '3324', navn: 'Gol' },
+    { nummer: '3326', navn: 'Hemsedal' },
+    { nummer: '3330', navn: 'Hol' },
+    { nummer: '3310', navn: 'Hole' },
+    { nummer: '3303', navn: 'Kongsberg' },
+    { nummer: '3318', navn: 'Krødsherad' },
+    { nummer: '3312', navn: 'Lier' },
+    { nummer: '3316', navn: 'Modum' },
+    { nummer: '3322', navn: 'Nesbyen' },
+    { nummer: '3338', navn: 'Nore og Uvdal' },
+    { nummer: '3305', navn: 'Ringerike' },
+    { nummer: '3336', navn: 'Rollag' },
+    { nummer: '3332', navn: 'Sigdal' },
+    { nummer: '3314', navn: 'Øvre Eiker' },
+    { nummer: '3328', navn: 'Ål' }
+  ]
 };
 
+for (const kommuner of Object.values(FYLKER)) {
+  kommuner.sort((a, b) => nb.compare(a.navn, b.navn));
+}
+
 const ALLE_KOMMUNER = Object.values(FYLKER).flat();
+const KOMMUNENUMMER = new Set(ALLE_KOMMUNER.map(k => k.nummer));
 
 const fylkeFor = (kommunenummer = '') =>
-  Object.keys(FYLKER).find(f => FYLKER[f].includes(kommunenummer)) || null;
+  Object.keys(FYLKER).find(f => FYLKER[f].some(k => k.nummer === kommunenummer)) || null;
 
 const SELSKAPSFORMER = new Set(['AS', 'ASA', 'ANS', 'DA', 'NUF', 'BA', 'SA', 'KS', 'BBL', 'IKS']);
 
@@ -48,7 +97,16 @@ const brreg = axios.create({
 
 function mapEnhet(e) {
   const adr = e.forretningsadresse || {};
+  const post = e.postadresse || {};
+
+  // Brreg treffer på både forretnings- og postadresse, så et bykfilter kan gi
+  // treff der postadressen ligger i byen og forretningsadressen ikke gjør det.
+  // Uten dette ser kortet ut som feil treff.
+  const avvikendePost =
+    post.kommune && post.kommune !== adr.kommune ? titleCase(post.kommune) : null;
+
   return {
+    postKommune: avvikendePost,
     id: e.organisasjonsnummer,
     orgnr: e.organisasjonsnummer,
     name: titleCase(e.navn),
@@ -71,15 +129,24 @@ function mapEnhet(e) {
   };
 }
 
+app.get('/api/kommuner', (req, res) => {
+  res.json({ fylker: FYLKER });
+});
+
 // Søk i Enhetsregisteret
 app.get('/api/companies', async (req, res) => {
   try {
-    const { search = '', fylke = '', page = 0, size = 24 } = req.query;
-    const kommuner = FYLKER[fylke] || ALLE_KOMMUNER;
+    const { search = '', fylke = '', kommune = '', page = 0, size = 24 } = req.query;
+
+    // En gyldig kommune er mer spesifikk enn fylket og vinner; ukjente verdier
+    // ignoreres så et utdatert bokmerke ikke gir null treff uten forklaring.
+    const kommuner = KOMMUNENUMMER.has(kommune)
+      ? [{ nummer: kommune }]
+      : (FYLKER[fylke] || ALLE_KOMMUNER);
 
     const params = {
       naeringskode: NAERINGSKODER,
-      kommunenummer: kommuner.join(','),
+      kommunenummer: kommuner.map(k => k.nummer).join(','),
       size: Math.min(Number(size) || 24, 100),
       page: Number(page) || 0
     };

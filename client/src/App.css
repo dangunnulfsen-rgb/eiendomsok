@@ -65,9 +65,14 @@ body {
 /* Search Form */
 .search-form {
   display: grid;
-  grid-template-columns: 1fr 200px auto;
+  grid-template-columns: 1fr 170px 170px auto;
   gap: 12px;
   margin-bottom: 48px;
+}
+
+.search-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .search-input {

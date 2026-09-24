@@ -7,6 +7,7 @@ import Stats from './components/Stats';
 import getApiBaseUrl from './utils/api';
 
 const PAGE_SIZE = 24;
+const FYLKESNAVN = ['Telemark', 'Vestfold', 'Buskerud'];
 
 function App() {
   const [companies, setCompanies] = useState([]);
@@ -16,7 +17,9 @@ function App() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [search, setSearch] = useState('');
   const [fylke, setFylke] = useState('');
-  const [query, setQuery] = useState({ search: '', fylke: '' });
+  const [kommune, setKommune] = useState('');
+  const [fylker, setFylker] = useState({});
+  const [query, setQuery] = useState({ search: '', fylke: '', kommune: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -46,10 +49,33 @@ function App() {
     fetchCompanies();
   }, [fetchCompanies]);
 
+  useEffect(() => {
+    axios
+      .get(`${getApiBaseUrl()}/api/kommuner`)
+      .then(({ data }) => setFylker(data.fylker || {}))
+      .catch((err) => console.error('Kunne ikke hente kommuneliste:', err));
+  }, []);
+
+  const fylkesvalg = Object.keys(fylker).length ? Object.keys(fylker) : FYLKESNAVN;
+
+  // Uten valgt fylke kan man velge blant alle kommunene
+  const valgbareKommuner = fylke
+    ? fylker[fylke] || []
+    : Object.values(fylker).flat().sort((a, b) => a.navn.localeCompare(b.navn, 'nb'));
+
+  const handleFylke = (nyttFylke) => {
+    setFylke(nyttFylke);
+    // Behold byen bare hvis den ligger i det nye fylket
+    const fortsattGyldig = nyttFylke
+      ? (fylker[nyttFylke] || []).some((k) => k.nummer === kommune)
+      : true;
+    if (!fortsattGyldig) setKommune('');
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(0);
-    setQuery({ search, fylke });
+    setQuery({ search, fylke, kommune });
   };
 
   // Brreg tillater ikke paginering forbi 10 000 treff
@@ -79,13 +105,26 @@ function App() {
               />
               <select
                 value={fylke}
-                onChange={(e) => setFylke(e.target.value)}
+                onChange={(e) => handleFylke(e.target.value)}
                 className="search-input"
+                aria-label="Fylke"
               >
                 <option value="">Alle fylker</option>
-                <option value="Telemark">Telemark</option>
-                <option value="Vestfold">Vestfold</option>
-                <option value="Buskerud">Buskerud</option>
+                {fylkesvalg.map((navn) => (
+                  <option key={navn} value={navn}>{navn}</option>
+                ))}
+              </select>
+              <select
+                value={kommune}
+                onChange={(e) => setKommune(e.target.value)}
+                className="search-input"
+                aria-label="By"
+                disabled={valgbareKommuner.length === 0}
+              >
+                <option value="">Alle byer</option>
+                {valgbareKommuner.map((k) => (
+                  <option key={k.nummer} value={k.nummer}>{k.navn}</option>
+                ))}
               </select>
               <button type="submit" className="btn-primary">Søk</button>
             </form>
