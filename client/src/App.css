@@ -239,6 +239,95 @@ body {
   font-size: 16px;
 }
 
+.gruppe-sammendrag {
+  margin-bottom: 16px;
+  color: var(--color-secondary);
+  font-size: 13px;
+}
+
+.gruppe-rad {
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.gruppe-topp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gruppe-pil {
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
+.gruppe-adresse {
+  flex: 1;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.gruppe-antall {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gruppe-medlemmer {
+  border-top: 1px solid var(--color-border);
+}
+
+.gruppe-selskap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.gruppe-selskap.innrykk {
+  margin-bottom: 0;
+  border-radius: 0;
+  box-shadow: none;
+  border-bottom: 1px solid var(--color-border);
+  background: #fbfbfd;
+}
+
+.gruppe-medlemmer .gruppe-selskap:last-child {
+  border-bottom: 0;
+}
+
+.gruppe-selskap strong {
+  display: block;
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.gruppe-selskap p {
+  margin-top: 3px;
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
 .view-toggle {
   display: inline-flex;
   gap: 4px;

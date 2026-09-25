@@ -314,6 +314,120 @@ async function medBegrensetParallellitet(elementer, grense, fn) {
   return resultater;
 }
 
+// Gruppering må se hele treffsettet: medlemmene i en portefølje har sjelden
+// navn som havner på samme listeside, så gruppering per side finner nesten
+// ingenting. Brreg gir 1000 per kall, og dyp paginering stopper ved 10 000.
+const GRUPPE_MAKS = 5000;
+const GRUPPE_SIDE = 1000;
+const GRUPPE_TTL = 10 * 60 * 1000;
+const gruppeCache = new Map();
+
+function grupperEtterAdresse(selskaper) {
+  const perAdresse = new Map();
+  for (const s of selskaper) {
+    const noekkel =
+      s.address && s.postalCode
+        ? `${s.address.trim().toLowerCase()}|${s.postalCode}`
+        : `alene:${s.orgnr}`;
+    if (!perAdresse.has(noekkel)) perAdresse.set(noekkel, []);
+    perAdresse.get(noekkel).push(s);
+  }
+
+  const grupper = [];
+  const enkeltvise = [];
+  for (const medlemmer of perAdresse.values()) {
+    if (medlemmer.length === 1) {
+      enkeltvise.push({ type: 'selskap', selskap: medlemmer[0] });
+    } else {
+      const forste = medlemmer[0];
+      grupper.push({
+        type: 'gruppe',
+        id: `${forste.postalCode}-${forste.address}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        adresse: [forste.address, [forste.postalCode, forste.city].filter(Boolean).join(' ')]
+          .filter(Boolean)
+          .join(', '),
+        antall: medlemmer.length,
+        selskaper: medlemmer
+      });
+    }
+  }
+
+  // Porteføljene er poenget med visningen, så de ligger øverst, størst først.
+  grupper.sort((a, b) => b.antall - a.antall || nb.compare(a.adresse, b.adresse));
+  enkeltvise.sort((a, b) => nb.compare(a.selskap.name || '', b.selskap.name || ''));
+  return [...grupper, ...enkeltvise];
+}
+
+async function hentForGruppering(query) {
+  const noekkel = JSON.stringify({
+    search: query.search || '',
+    fylke: query.fylke || '',
+    kommune: query.kommune || ''
+  });
+
+  const lagret = gruppeCache.get(noekkel);
+  if (lagret && Date.now() - lagret.tid < GRUPPE_TTL) return lagret;
+
+  const { params } = byggSokeParams({ ...query, size: GRUPPE_SIDE, page: 0 }, GRUPPE_SIDE);
+  const forste = await brreg.get('/enheter', { params });
+  const total = forste.data.page?.totalElements ?? 0;
+
+  const selskaper = (forste.data._embedded?.enheter || []).map(mapEnhet);
+  const sider = Math.min(
+    Math.ceil(Math.min(total, GRUPPE_MAKS) / GRUPPE_SIDE),
+    GRUPPE_MAKS / GRUPPE_SIDE
+  );
+
+  if (sider > 1) {
+    const resten = await Promise.all(
+      Array.from({ length: sider - 1 }, (_, i) =>
+        brreg
+          .get('/enheter', { params: { ...params, page: i + 1 } })
+          .then(r => (r.data._embedded?.enheter || []).map(mapEnhet))
+          .catch(() => [])
+      )
+    );
+    for (const del of resten) selskaper.push(...del);
+  }
+
+  const resultat = {
+    tid: Date.now(),
+    rader: grupperEtterAdresse(selskaper),
+    antallSelskaper: selskaper.length,
+    total,
+    begrenset: total > selskaper.length ? selskaper.length : null
+  };
+
+  if (gruppeCache.size > 40) gruppeCache.clear();
+  gruppeCache.set(noekkel, resultat);
+  return resultat;
+}
+
+app.get('/api/grupper', async (req, res) => {
+  try {
+    const { page = 0, size = 24 } = req.query;
+    const data = await hentForGruppering(req.query);
+
+    const sideStr = Math.min(Number(size) || 24, 100);
+    const sideNr = Number(page) || 0;
+    const rader = data.rader.slice(sideNr * sideStr, (sideNr + 1) * sideStr);
+
+    res.json({
+      rader,
+      page: sideNr,
+      totalRader: data.rader.length,
+      totalPages: Math.ceil(data.rader.length / sideStr),
+      antallGrupper: data.rader.filter(r => r.type === 'gruppe').length,
+      antallSelskaper: data.antallSelskaper,
+      total: data.total,
+      begrenset: data.begrenset
+    });
+  } catch (error) {
+    console.error('Gruppering feilet:', error.message);
+    res.status(502).json({ error: 'Kunne ikke gruppere treffene' });
+  }
+});
+
 const KART_MAKS = 200;
 
 // Kartet viser hele utvalget, ikke én listeside — ellers ser man bare de 24
