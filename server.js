@@ -134,29 +134,34 @@ app.get('/api/kommuner', (req, res) => {
 });
 
 // Søk i Enhetsregisteret
+// Delt av liste- og kartvisningen, så de to alltid viser samme utvalg.
+function byggSokeParams({ search = '', fylke = '', kommune = '', page = 0, size = 24 }, maksSize = 100) {
+  // En gyldig kommune er mer spesifikk enn fylket og vinner; ukjente verdier
+  // ignoreres så et utdatert bokmerke ikke gir null treff uten forklaring.
+  const kommuner = KOMMUNENUMMER.has(kommune)
+    ? [{ nummer: kommune }]
+    : (FYLKER[fylke] || ALLE_KOMMUNER);
+
+  const params = {
+    naeringskode: NAERINGSKODER,
+    kommunenummer: kommuner.map(k => k.nummer).join(','),
+    size: Math.min(Number(size) || 24, maksSize),
+    page: Number(page) || 0
+  };
+
+  const term = String(search).trim();
+  const orgnr = term.replace(/[\s.-]/g, '');
+  const sokerPaaOrgnr = /^\d{9}$/.test(orgnr);
+
+  if (sokerPaaOrgnr) params.organisasjonsnummer = orgnr;
+  else if (term) params.navn = term;
+
+  return { params, orgnr, sokerPaaOrgnr };
+}
+
 app.get('/api/companies', async (req, res) => {
   try {
-    const { search = '', fylke = '', kommune = '', page = 0, size = 24 } = req.query;
-
-    // En gyldig kommune er mer spesifikk enn fylket og vinner; ukjente verdier
-    // ignoreres så et utdatert bokmerke ikke gir null treff uten forklaring.
-    const kommuner = KOMMUNENUMMER.has(kommune)
-      ? [{ nummer: kommune }]
-      : (FYLKER[fylke] || ALLE_KOMMUNER);
-
-    const params = {
-      naeringskode: NAERINGSKODER,
-      kommunenummer: kommuner.map(k => k.nummer).join(','),
-      size: Math.min(Number(size) || 24, 100),
-      page: Number(page) || 0
-    };
-
-    const term = search.trim();
-    const orgnr = term.replace(/[\s.-]/g, '');
-    const sokerPaaOrgnr = /^\d{9}$/.test(orgnr);
-
-    if (sokerPaaOrgnr) params.organisasjonsnummer = orgnr;
-    else if (term) params.navn = term;
+    const { params, orgnr, sokerPaaOrgnr } = byggSokeParams(req.query);
 
     const { data } = await brreg.get('/enheter', { params });
     const enheter = data._embedded?.enheter || [];
@@ -238,30 +243,112 @@ app.get('/api/companies/:id', async (req, res) => {
 });
 
 // Geokoding via Kartverket (Geonorge) av selskapets registrerte adresser
-async function geocode(adresse) {
-  const linje = (adresse.adresse || []).filter(Boolean).join(' ');
-  if (!linje || !adresse.postnummer) return null;
+const geoCache = new Map();
 
-  try {
-    const { data } = await axios.get(GEONORGE, {
-      params: { sok: linje, postnummer: adresse.postnummer, treffPerSide: 1 },
-      timeout: 10000
-    });
-    const treff = data.adresser?.[0];
-    if (!treff?.representasjonspunkt) return null;
+async function slaaOppAdresse(linje, postnummer) {
+  const key = `${linje}|${postnummer}`;
+  if (geoCache.has(key)) return geoCache.get(key);
 
-    return {
-      address: `${treff.adressetekst}, ${treff.postnummer} ${titleCase(treff.poststed)}`,
-      lat: treff.representasjonspunkt.lat,
-      lng: treff.representasjonspunkt.lon,
-      kommune: titleCase(treff.kommunenavn),
-      matrikkel: `${treff.kommunenummer}-${treff.gardsnummer}/${treff.bruksnummer}`
-    };
-  } catch (error) {
-    console.warn('Geokoding feilet:', error.message);
-    return null;
+  // Geonorge svarer av og til 502 på en byge av kall. Uten et nytt forsøk
+  // forsvinner markørene fra kartet uten at noe tyder på at det er galt.
+  let svar = null;
+  for (let forsok = 0; forsok < 2; forsok++) {
+    try {
+      svar = await axios.get(GEONORGE, {
+        params: { sok: linje, postnummer, treffPerSide: 1 },
+        timeout: 10000
+      });
+      break;
+    } catch (error) {
+      if (forsok === 1) {
+        console.warn('Geokoding feilet:', error.message);
+        return null; // ikke cache nettverksfeil
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
   }
+
+  const treff = svar.data.adresser?.[0];
+  const punkt = treff?.representasjonspunkt
+    ? {
+        address: `${treff.adressetekst}, ${treff.postnummer} ${titleCase(treff.poststed)}`,
+        lat: treff.representasjonspunkt.lat,
+        lng: treff.representasjonspunkt.lon,
+        kommune: titleCase(treff.kommunenavn),
+        matrikkel: `${treff.kommunenummer}-${treff.gardsnummer}/${treff.bruksnummer}`
+      }
+    : null;
+
+  geoCache.set(key, punkt);
+  return punkt;
 }
+
+async function geocode(adresse) {
+  const ledd = (adresse.adresse || [])
+    .filter(Boolean)
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (!ledd.length || !adresse.postnummer) return null;
+
+  const treff = await slaaOppAdresse(ledd.join(', '), adresse.postnummer);
+  if (treff) return treff;
+
+  // "c/o Regnskap AS, Storgata 4" og "Almlia, Ulefossvegen 363" slår ikke opp
+  // som helhet. Gateadressen står sist, så den er verdt et forsøk til —
+  // det tar treffraten fra ~79 % til ~98 %.
+  if (ledd.length > 1) return slaaOppAdresse(ledd[ledd.length - 1], adresse.postnummer);
+  return null;
+}
+
+// Geonorge er raskt, men vi lar være å åpne 200 samtidige kall mot dem.
+async function medBegrensetParallellitet(elementer, grense, fn) {
+  const resultater = new Array(elementer.length);
+  let neste = 0;
+  const arbeidere = Array.from({ length: Math.min(grense, elementer.length) }, async () => {
+    while (neste < elementer.length) {
+      const i = neste++;
+      resultater[i] = await fn(elementer[i], i);
+    }
+  });
+  await Promise.all(arbeidere);
+  return resultater;
+}
+
+const KART_MAKS = 200;
+
+// Kartet viser hele utvalget, ikke én listeside — ellers ser man bare de 24
+// alfabetisk første selskapene og lærer ingenting om geografien.
+app.get('/api/kart', async (req, res) => {
+  try {
+    const { params } = byggSokeParams({ ...req.query, size: KART_MAKS, page: 0 }, KART_MAKS);
+
+    const { data } = await brreg.get('/enheter', { params });
+    const enheter = (data._embedded?.enheter || []).map(mapEnhet);
+    const total = data.page?.totalElements ?? 0;
+
+    const punkter = await medBegrensetParallellitet(enheter, 8, async (selskap) => {
+      const geo = await geocode({
+        adresse: selskap.address ? selskap.address.split(', ') : [],
+        postnummer: selskap.postalCode
+      });
+      return geo && { ...selskap, lat: geo.lat, lng: geo.lng, geokodetAdresse: geo.address };
+    });
+
+    const funnet = punkter.filter(Boolean);
+
+    res.json({
+      points: funnet,
+      total,
+      vist: enheter.length,
+      utenPosisjon: enheter.length - funnet.length,
+      begrenset: total > KART_MAKS ? KART_MAKS : null,
+      source: 'Enhetsregisteret · geokodet med Kartverket (Geonorge)'
+    });
+  } catch (error) {
+    console.error('Kartsøk feilet:', error.message);
+    res.status(502).json({ error: 'Kunne ikke hente kartdata' });
+  }
+});
 
 app.get('/api/properties', async (req, res) => {
   const { orgnr } = req.query;

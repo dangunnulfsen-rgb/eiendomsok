@@ -3,6 +3,7 @@ import axios from 'axios';
 import './App.css';
 import CompanyList from './components/CompanyList';
 import CompanyDetail from './components/CompanyDetail';
+import ResultsMap from './components/ResultsMap';
 import Stats from './components/Stats';
 import getApiBaseUrl from './utils/api';
 
@@ -23,6 +24,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [visning, setVisning] = useState('liste');
+  const [kart, setKart] = useState({ points: [], total: 0, vist: 0, utenPosisjon: 0, begrenset: null });
+  const [kartLaster, setKartLaster] = useState(false);
 
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
@@ -48,6 +52,36 @@ function App() {
   useEffect(() => {
     fetchCompanies();
   }, [fetchCompanies]);
+
+  // Kartet henter hele utvalget, ikke listesiden, så det trenger sitt eget kall
+  useEffect(() => {
+    if (visning !== 'kart') return;
+    let avbrutt = false;
+
+    setKartLaster(true);
+    axios
+      .get(`${getApiBaseUrl()}/api/kart`, { params: query })
+      .then(({ data }) => {
+        if (avbrutt) return;
+        setKart({
+          points: data.points || [],
+          total: data.total || 0,
+          vist: data.vist || 0,
+          utenPosisjon: data.utenPosisjon || 0,
+          begrenset: data.begrenset || null
+        });
+      })
+      .catch((err) => {
+        if (avbrutt) return;
+        console.error('Feil ved henting av kartdata:', err);
+        setKart({ points: [], total: 0, vist: 0, utenPosisjon: 0, begrenset: null });
+      })
+      .finally(() => !avbrutt && setKartLaster(false));
+
+    return () => {
+      avbrutt = true;
+    };
+  }, [visning, query]);
 
   useEffect(() => {
     axios
@@ -129,18 +163,47 @@ function App() {
               <button type="submit" className="btn-primary">Søk</button>
             </form>
 
+            <div className="view-toggle" role="group" aria-label="Visning">
+              <button
+                type="button"
+                className={visning === 'liste' ? 'active' : ''}
+                onClick={() => setVisning('liste')}
+              >
+                Liste
+              </button>
+              <button
+                type="button"
+                className={visning === 'kart' ? 'active' : ''}
+                onClick={() => setVisning('kart')}
+              >
+                Kart
+              </button>
+            </div>
+
             {error && <div className="loading">{error}</div>}
             {notice && !loading && <div className="notice">{notice}</div>}
 
-            {(!notice || loading) && (
-              <CompanyList
-                companies={companies}
-                loading={loading}
+            {visning === 'kart' ? (
+              <ResultsMap
+                points={kart.points}
+                loading={kartLaster}
+                total={kart.total}
+                vist={kart.vist}
+                utenPosisjon={kart.utenPosisjon}
+                begrenset={kart.begrenset}
                 onSelectCompany={setSelectedCompany}
               />
+            ) : (
+              (!notice || loading) && (
+                <CompanyList
+                  companies={companies}
+                  loading={loading}
+                  onSelectCompany={setSelectedCompany}
+                />
+              )
             )}
 
-            {maksSider > 1 && (
+            {visning === 'liste' && maksSider > 1 && (
               <div className="pagination">
                 <button
                   className="btn-secondary"
